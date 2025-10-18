@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../redux/auth/authHooks';
 import CustomInput from '../components/common/Input';
 import Button from '../components/common/Button';
@@ -7,9 +7,13 @@ import Card from '../components/common/Card';
 import { Box, Typography, Alert, FormControlLabel, Checkbox, Container, Grid } from '@mui/material';
 
 const Register = () => {
+  const location = useLocation();
+  const invitationEmail = location.state?.email || localStorage.getItem('invitation_email') || '';
+  const [pendingInvitation, setPendingInvitation] = useState(null);
+  
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
+    email: invitationEmail,
     password: '',
     confirmPassword: '',
   });
@@ -19,6 +23,14 @@ const Register = () => {
 
   const { registerUser, isLoading, error, clearAuthError } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check for pending invitation token
+    const token = localStorage.getItem('pending_invitation_token');
+    if (token) {
+      setPendingInvitation(token);
+    }
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -57,7 +69,18 @@ const Register = () => {
         password2: formData.confirmPassword,
       };
       await registerUser(payload).unwrap();
-      navigate('/dashboard');
+      
+      // Clear invitation email from localStorage
+      localStorage.removeItem('invitation_email');
+      
+      // Check if there's a pending invitation
+      const invitationToken = localStorage.getItem('pending_invitation_token');
+      if (invitationToken) {
+        // Redirect to invitation page to auto-accept
+        navigate(`/accept-invitation/${invitationToken}`);
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       console.error('Registration failed:', err);
       // Handle backend validation errors
@@ -90,6 +113,12 @@ const Register = () => {
         <Card elevation={8} sx={{ borderRadius: 3, overflow: 'hidden' }}>
           <Box sx={{ p: 4 }}>
             <form onSubmit={handleSubmit}>
+              {pendingInvitation && (
+                <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
+                  You have a pending organization invitation. Create your account to accept it!
+                </Alert>
+              )}
+              
               {error && (
                 <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
                   {typeof error === 'object' ? JSON.stringify(error) : error}
@@ -98,7 +127,18 @@ const Register = () => {
 
               <CustomInput label="Full Name" name="name" type="text" placeholder="John Doe" value={formData.name} onChange={handleChange} error={errors.name} required icon="user" />
 
-              <CustomInput label="Email Address" name="email" type="email" placeholder="john@example.com" value={formData.email} onChange={handleChange} error={errors.email} required icon="email" />
+              <CustomInput 
+                label="Email Address" 
+                name="email" 
+                type="email" 
+                placeholder="john@example.com" 
+                value={formData.email} 
+                onChange={handleChange} 
+                error={errors.email} 
+                required 
+                icon="email"
+                disabled={!!invitationEmail}
+              />
 
               <CustomInput label="Password" name="password" type="password" placeholder="Enter your password" value={formData.password} onChange={handleChange} error={errors.password} required icon="password" showPassword={showPassword} onTogglePassword={() => setShowPassword(!showPassword)} />
 

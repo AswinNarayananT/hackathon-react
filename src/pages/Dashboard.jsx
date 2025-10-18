@@ -11,6 +11,7 @@ import {
   Select,
   MenuItem,
   FormControl,
+  InputLabel,
   Chip,
   Grid,
   CircularProgress,
@@ -25,7 +26,7 @@ import {
   Divider,
   Paper,
 } from '@mui/material';
-import { LogOut, User, Building2, Users, Crown, Plus, FolderTree, Settings, ChevronDown } from 'lucide-react';
+import { LogOut, User, Building2, Users, Crown, Plus, FolderTree, Settings, ChevronDown, Mail, Trash2, Send, Link2, Copy, ExternalLink, Calendar } from 'lucide-react';
 import api from '../api';
 
 const Dashboard = () => {
@@ -36,23 +37,42 @@ const Dashboard = () => {
     members,
     currentUserRole,
     namespaces,
+    shortURLs,
     isLoading,
     isMembersLoading,
     isNamespacesLoading,
+    isShortURLsLoading,
     error,
+    shortURLsError,
     loadOrganizations,
     loadOrganizationMembers,
     loadOrganizationNamespaces,
+    loadOrganizationShortURLs,
     selectOrganization,
     createNewOrganization,
+    createNewShortURL,
   } = useOrganization();
 
   const [openCreateOrgDialog, setOpenCreateOrgDialog] = useState(false);
   const [openCreateNamespaceDialog, setOpenCreateNamespaceDialog] = useState(false);
+  const [openInviteDialog, setOpenInviteDialog] = useState(false);
+  const [openCreateShortURLDialog, setOpenCreateShortURLDialog] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
   const [newNamespaceName, setNewNamespaceName] = useState('');
   const [createOrgError, setCreateOrgError] = useState('');
   const [createNamespaceError, setCreateNamespaceError] = useState('');
+  const [invitations, setInvitations] = useState([{ email: '', role: 'viewer' }]);
+  const [sending, setSending] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState('');
+  const [shortURLForm, setShortURLForm] = useState({
+    namespace: '',
+    shortcode: '',
+    original_url: '',
+    is_private: false
+  });
+  const [createShortURLError, setCreateShortURLError] = useState('');
+  const [copySuccess, setCopySuccess] = useState('');
 
   // Fetch organizations on mount
   useEffect(() => {
@@ -61,13 +81,14 @@ const Dashboard = () => {
     }
   }, [user, loadOrganizations]);
 
-  // Fetch members and namespaces when current organization changes
+  // Fetch members, namespaces, and short URLs when current organization changes
   useEffect(() => {
     if (currentOrganization) {
       loadOrganizationMembers(currentOrganization.id);
       loadOrganizationNamespaces(currentOrganization.id);
+      loadOrganizationShortURLs(currentOrganization.id);
     }
-  }, [currentOrganization, loadOrganizationMembers, loadOrganizationNamespaces]);
+  }, [currentOrganization, loadOrganizationMembers, loadOrganizationNamespaces, loadOrganizationShortURLs]);
 
   const handleOrganizationChange = (event) => {
     selectOrganization(event.target.value);
@@ -136,6 +157,107 @@ const Dashboard = () => {
     }
   };
 
+  const addInvitationRow = () => {
+    setInvitations([...invitations, { email: '', role: 'viewer' }]);
+  };
+
+  const removeInvitationRow = (index) => {
+    const newInvitations = invitations.filter((_, i) => i !== index);
+    setInvitations(newInvitations.length > 0 ? newInvitations : [{ email: '', role: 'viewer' }]);
+  };
+
+  const updateInvitation = (index, field, value) => {
+    const newInvitations = [...invitations];
+    newInvitations[index][field] = value;
+    setInvitations(newInvitations);
+  };
+
+  const handleSendInvitations = async () => {
+    // Validate
+    const validInvitations = invitations.filter(inv => inv.email.trim() !== '');
+    
+    if (validInvitations.length === 0) {
+      setInviteError('Please add at least one email address');
+      return;
+    }
+
+    // Validate emails
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidEmails = validInvitations.filter(inv => !emailRegex.test(inv.email));
+    
+    if (invalidEmails.length > 0) {
+      setInviteError('Please enter valid email addresses');
+      return;
+    }
+
+    setSending(true);
+    setInviteError('');
+    setInviteSuccess('');
+
+    try {
+      const response = await api.post(
+        `/shorturl/organizations/${currentOrganization.id}/invite/`,
+        { invitations: validInvitations }
+      );
+      
+      setInviteSuccess(response.data.message);
+      setInvitations([{ email: '', role: 'viewer' }]);
+      setOpenInviteDialog(false);
+      
+      // Reload members
+      loadOrganizationMembers(currentOrganization.id);
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setInviteSuccess(''), 3000);
+    } catch (err) {
+      setInviteError(err.response?.data?.error || err.response?.data?.invitations?.[0] || 'Failed to send invitations');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleCreateShortURL = async () => {
+    if (!shortURLForm.namespace) {
+      setCreateShortURLError('Please select a namespace');
+      return;
+    }
+
+    if (!shortURLForm.original_url) {
+      setCreateShortURLError('Please enter a URL to shorten');
+      return;
+    }
+
+    // Validate URL
+    try {
+      new URL(shortURLForm.original_url);
+    } catch {
+      setCreateShortURLError('Please enter a valid URL');
+      return;
+    }
+
+    try {
+      await createNewShortURL(shortURLForm).unwrap();
+      setOpenCreateShortURLDialog(false);
+      setShortURLForm({
+        namespace: '',
+        shortcode: '',
+        original_url: '',
+        is_private: false
+      });
+      setCreateShortURLError('');
+      // Reload short URLs
+      loadOrganizationShortURLs(currentOrganization.id);
+    } catch (err) {
+      setCreateShortURLError(err?.shortcode?.[0] || err?.original_url?.[0] || 'Failed to create short URL');
+    }
+  };
+
+  const handleCopyShortURL = (shortURL) => {
+    navigator.clipboard.writeText(shortURL);
+    setCopySuccess(shortURL);
+    setTimeout(() => setCopySuccess(''), 2000);
+  };
+
   return (
     <Box sx={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
       {/* GoDaddy-style Header */}
@@ -160,6 +282,24 @@ const Dashboard = () => {
                   Analytics
                 </Button>
               </Box>
+            </Box>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {currentUserRole === 'admin' && currentOrganization && (
+                <Button
+                  variant="contained"
+                  startIcon={<Mail size={16} />}
+                  onClick={() => setOpenInviteDialog(true)}
+                  sx={{
+                    backgroundColor: '#1dbf73',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    '&:hover': { backgroundColor: '#17a05d' }
+                  }}
+                >
+                  Invite Members
+                </Button>
+              )}
             </Box>
             
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -195,6 +335,12 @@ const Dashboard = () => {
       </Box>
 
       <Container maxWidth="xl" sx={{ py: 4 }}>
+        {inviteSuccess && (
+          <Alert severity="success" sx={{ mb: 3, borderRadius: 1 }}>
+            {inviteSuccess}
+          </Alert>
+        )}
+
         {error && (
           <Alert severity="error" sx={{ mb: 3, borderRadius: 1 }}>
             {typeof error === 'object' ? JSON.stringify(error) : error}
@@ -361,6 +507,202 @@ const Dashboard = () => {
               </Grid>
             )}
 
+            {/* Short URLs Section */}
+            {currentOrganization && (
+              <Grid item xs={12}>
+                <Paper elevation={0} sx={{ borderRadius: 1, border: '1px solid #ddd', backgroundColor: 'white' }}>
+                  <Box sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Link2 size={24} color="#1dbf73" />
+                        <Typography variant="h6" sx={{ fontWeight: 700, color: '#111' }}>
+                          Short URLs
+                        </Typography>
+                        <Chip label={shortURLs.length} size="small" sx={{ backgroundColor: '#f0f0f0' }} />
+                      </Box>
+                      
+                      {(currentUserRole === 'admin' || currentUserRole === 'editor') && namespaces.length > 0 && (
+                        <Button
+                          variant="contained"
+                          startIcon={<Plus size={16} />}
+                          onClick={() => setOpenCreateShortURLDialog(true)}
+                          sx={{
+                            backgroundColor: '#1dbf73',
+                            textTransform: 'none',
+                            fontWeight: 600,
+                            borderRadius: 1,
+                            '&:hover': { backgroundColor: '#17a05d' }
+                          }}
+                        >
+                          Create Short URL
+                        </Button>
+                      )}
+                    </Box>
+
+                    {copySuccess && (
+                      <Alert severity="success" sx={{ mb: 2 }}>
+                        Copied: {copySuccess}
+                      </Alert>
+                    )}
+                    
+                    {isShortURLsLoading ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                        <CircularProgress size={24} />
+                      </Box>
+                    ) : shortURLs.length > 0 ? (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {shortURLs.map((url) => (
+                          <Paper 
+                            key={url.id} 
+                            elevation={0} 
+                            sx={{ 
+                              p: 2.5, 
+                              border: '1px solid #e0e0e0', 
+                              borderRadius: 1,
+                              transition: 'all 0.2s',
+                              '&:hover': { 
+                                borderColor: '#1dbf73', 
+                                boxShadow: '0 2px 8px rgba(29,191,115,0.1)' 
+                              } 
+                            }}
+                          >
+                            <Grid container spacing={2} alignItems="center">
+                              <Grid item xs={12} md={5}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                  <Box sx={{ 
+                                    backgroundColor: '#f0f9f4', 
+                                    p: 1, 
+                                    borderRadius: 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}>
+                                    <Link2 size={20} color="#1dbf73" />
+                                  </Box>
+                                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                      <Typography 
+                                        variant="subtitle1" 
+                                        sx={{ 
+                                          fontWeight: 600, 
+                                          color: '#1dbf73',
+                                          cursor: 'pointer',
+                                          '&:hover': { textDecoration: 'underline' }
+                                        }}
+                                        onClick={() => window.open(url.short_url, '_blank')}
+                                      >
+                                        {url.namespace_name}/{url.shortcode}
+                                      </Typography>
+                                      {url.is_private && (
+                                        <Chip label="Private" size="small" sx={{ height: 20, fontSize: '0.7rem' }} />
+                                      )}
+                                    </Box>
+                                    <Typography 
+                                      variant="body2" 
+                                      color="text.secondary"
+                                      sx={{ 
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap'
+                                      }}
+                                    >
+                                      {url.original_url}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                              </Grid>
+                              
+                              <Grid item xs={12} md={4}>
+                                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                      Clicks
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                      {url.click_count}
+                                    </Typography>
+                                  </Box>
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                      Created
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                      {new Date(url.created_at).toLocaleDateString()}
+                                    </Typography>
+                                  </Box>
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                      By
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                      {url.created_by_email?.split('@')[0]}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                              </Grid>
+                              
+                              <Grid item xs={12} md={3}>
+                                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                                  <IconButton 
+                                    size="small"
+                                    onClick={() => handleCopyShortURL(url.short_url)}
+                                    sx={{ 
+                                      color: '#1dbf73',
+                                      '&:hover': { backgroundColor: 'rgba(29,191,115,0.1)' }
+                                    }}
+                                  >
+                                    <Copy size={18} />
+                                  </IconButton>
+                                  <IconButton 
+                                    size="small"
+                                    onClick={() => window.open(url.short_url, '_blank')}
+                                    sx={{ 
+                                      color: '#666',
+                                      '&:hover': { backgroundColor: 'rgba(0,0,0,0.05)' }
+                                    }}
+                                  >
+                                    <ExternalLink size={18} />
+                                  </IconButton>
+                                </Box>
+                              </Grid>
+                            </Grid>
+                          </Paper>
+                        ))}
+                      </Box>
+                    ) : (
+                      <Box sx={{ textAlign: 'center', py: 6, backgroundColor: '#f9f9f9', borderRadius: 1 }}>
+                        <Link2 size={48} color="#ccc" style={{ margin: '0 auto 16px', display: 'block' }} />
+                        <Typography variant="h6" sx={{ mb: 1, color: '#666' }}>
+                          No Short URLs Yet
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          {namespaces.length === 0 
+                            ? 'Create a namespace first to start shortening URLs'
+                            : 'Create your first short URL to get started'
+                          }
+                        </Typography>
+                        {(currentUserRole === 'admin' || currentUserRole === 'editor') && namespaces.length > 0 && (
+                          <Button
+                            variant="contained"
+                            startIcon={<Plus size={16} />}
+                            onClick={() => setOpenCreateShortURLDialog(true)}
+                            sx={{
+                              backgroundColor: '#1dbf73',
+                              textTransform: 'none',
+                              fontWeight: 600,
+                              '&:hover': { backgroundColor: '#17a05d' }
+                            }}
+                          >
+                            Create Short URL
+                          </Button>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                </Paper>
+              </Grid>
+            )}
+
             {/* Members List - GoDaddy Style */}
             {currentOrganization && (
               <Grid item xs={12}>
@@ -518,6 +860,225 @@ const Dashboard = () => {
             disabled={!currentOrganization}
           >
             Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Invite Members Dialog */}
+      <Dialog 
+        open={openInviteDialog} 
+        onClose={() => {
+          setOpenInviteDialog(false);
+          setInvitations([{ email: '', role: 'viewer' }]);
+          setInviteError('');
+        }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Mail size={24} color="#1dbf73" />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              Invite Team Members to {currentOrganization?.name}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mt: 2, mb: 3 }}>
+            Invite multiple team members at once. They'll receive an email with a link to join your organization.
+          </Alert>
+
+          {invitations.map((invitation, index) => (
+            <Box key={index} sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'flex-start' }}>
+              <TextField
+                fullWidth
+                label="Email Address"
+                type="email"
+                value={invitation.email}
+                onChange={(e) => updateInvitation(index, 'email', e.target.value)}
+                placeholder="colleague@example.com"
+                sx={{ flex: 2 }}
+              />
+              <FormControl sx={{ flex: 1 }}>
+                <InputLabel>Role</InputLabel>
+                <Select
+                  value={invitation.role}
+                  label="Role"
+                  onChange={(e) => updateInvitation(index, 'role', e.target.value)}
+                >
+                  <MenuItem value="viewer">Viewer</MenuItem>
+                  <MenuItem value="editor">Editor</MenuItem>
+                  <MenuItem value="admin">Admin</MenuItem>
+                </Select>
+              </FormControl>
+              {invitations.length > 1 && (
+                <IconButton 
+                  onClick={() => removeInvitationRow(index)}
+                  color="error"
+                  sx={{ mt: 1 }}
+                >
+                  <Trash2 size={20} />
+                </IconButton>
+              )}
+            </Box>
+          ))}
+
+          <Button
+            startIcon={<Plus size={16} />}
+            onClick={addInvitationRow}
+            sx={{ 
+              textTransform: 'none',
+              color: '#1dbf73',
+              fontWeight: 600
+            }}
+          >
+            Add Another
+          </Button>
+
+          {inviteError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {inviteError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button 
+            onClick={() => {
+              setOpenInviteDialog(false);
+              setInvitations([{ email: '', role: 'viewer' }]);
+              setInviteError('');
+            }}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSendInvitations}
+            variant="contained"
+            disabled={sending}
+            startIcon={sending ? <CircularProgress size={16} color="inherit" /> : <Send size={16} />}
+            sx={{ 
+              textTransform: 'none',
+              backgroundColor: '#1dbf73',
+              '&:hover': { backgroundColor: '#17a05d' }
+            }}
+          >
+            {sending ? 'Sending...' : 'Send Invitations'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create Short URL Dialog */}
+      <Dialog 
+        open={openCreateShortURLDialog} 
+        onClose={() => {
+          setOpenCreateShortURLDialog(false);
+          setCreateShortURLError('');
+          setShortURLForm({
+            namespace: '',
+            shortcode: '',
+            original_url: '',
+            is_private: false
+          });
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Link2 size={24} color="#1dbf73" />
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              Create Short URL
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mt: 2, mb: 3 }}>
+            Create a short, memorable link for your long URL
+          </Alert>
+
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Namespace *</InputLabel>
+            <Select
+              value={shortURLForm.namespace}
+              label="Namespace *"
+              onChange={(e) => setShortURLForm({ ...shortURLForm, namespace: e.target.value })}
+            >
+              {namespaces.map((ns) => (
+                <MenuItem key={ns.id} value={ns.id}>
+                  {ns.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <TextField
+            fullWidth
+            label="Original URL *"
+            type="url"
+            value={shortURLForm.original_url}
+            onChange={(e) => setShortURLForm({ ...shortURLForm, original_url: e.target.value })}
+            placeholder="https://example.com/very/long/url"
+            sx={{ mb: 2 }}
+          />
+
+          <TextField
+            fullWidth
+            label="Custom Short Code (Optional)"
+            value={shortURLForm.shortcode}
+            onChange={(e) => setShortURLForm({ ...shortURLForm, shortcode: e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, '') })}
+            placeholder="my-link"
+            helperText="Leave empty for auto-generated code. Only letters, numbers, hyphens, and underscores allowed."
+            sx={{ mb: 2 }}
+          />
+
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <input
+                type="checkbox"
+                checked={shortURLForm.is_private}
+                onChange={(e) => setShortURLForm({ ...shortURLForm, is_private: e.target.checked })}
+                style={{ width: 18, height: 18 }}
+              />
+              <Typography variant="body2">
+                Make this URL private
+              </Typography>
+            </Box>
+          </FormControl>
+
+          {createShortURLError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {createShortURLError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button 
+            onClick={() => {
+              setOpenCreateShortURLDialog(false);
+              setCreateShortURLError('');
+              setShortURLForm({
+                namespace: '',
+                shortcode: '',
+                original_url: '',
+                is_private: false
+              });
+            }}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleCreateShortURL}
+            variant="contained"
+            disabled={!shortURLForm.namespace || !shortURLForm.original_url}
+            sx={{ 
+              textTransform: 'none',
+              backgroundColor: '#1dbf73',
+              '&:hover': { backgroundColor: '#17a05d' }
+            }}
+          >
+            Create Short URL
           </Button>
         </DialogActions>
       </Dialog>

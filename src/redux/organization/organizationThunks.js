@@ -65,3 +65,29 @@ export const fetchOrganizationNamespaces = createAsyncThunk(
     }
   }
 );
+
+// Fetch organization short URLs
+export const fetchOrganizationShortURLs = createAsyncThunk(
+  'organization/fetchOrganizationShortURLs',
+  async (organizationId, { rejectWithValue }) => {
+    try {
+      const response = await api.get(`/shorturl/organizations/${organizationId}/shorturls/`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message || 'Failed to fetch short URLs');
+    }
+  }
+);
+
+// Create short URL
+export const createShortURL = createAsyncThunk(
+  'organization/createShortURL',
+  async (shortURLData, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/shorturl/shorturls/', shortURLData);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message || 'Failed to create short URL');
+    }
+  }
+);

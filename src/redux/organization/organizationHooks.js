@@ -6,6 +6,8 @@ import {
   fetchOrganizationMembers,
   createOrganization,
   fetchOrganizationNamespaces,
+  fetchOrganizationShortURLs,
+  createShortURL,
 } from './organizationThunks';
 import {
   setCurrentOrganization,
@@ -23,12 +25,15 @@ export const useOrganization = () => {
     members,
     currentUserRole,
     namespaces,
+    shortURLs,
     isLoading,
     isMembersLoading,
     isNamespacesLoading,
+    isShortURLsLoading,
     error,
     membersError,
     namespacesError,
+    shortURLsError,
   } = useSelector((state) => state.organization);
 
   // Fetch all organizations
@@ -54,6 +59,16 @@ export const useOrganization = () => {
   // Fetch organization namespaces
   const loadOrganizationNamespaces = useCallback((organizationId) => {
     return dispatch(fetchOrganizationNamespaces(organizationId));
+  }, [dispatch]);
+
+  // Fetch organization short URLs
+  const loadOrganizationShortURLs = useCallback((organizationId) => {
+    return dispatch(fetchOrganizationShortURLs(organizationId));
+  }, [dispatch]);
+
+  // Create short URL
+  const createNewShortURL = useCallback((shortURLData) => {
+    return dispatch(createShortURL(shortURLData));
   }, [dispatch]);
 
   // Set current organization
@@ -83,12 +98,15 @@ export const useOrganization = () => {
     members,
     currentUserRole,
     namespaces,
+    shortURLs,
     isLoading,
     isMembersLoading,
     isNamespacesLoading,
+    isShortURLsLoading,
     error,
     membersError,
     namespacesError,
+    shortURLsError,
     
     // Actions
     loadOrganizations,
@@ -96,6 +114,8 @@ export const useOrganization = () => {
     loadOrganizationMembers,
     createNewOrganization,
     loadOrganizationNamespaces,
+    loadOrganizationShortURLs,
+    createNewShortURL,
     selectOrganization,
     deselectOrganization,
     clearOrganizationError,

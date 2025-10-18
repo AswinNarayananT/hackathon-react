@@ -5,6 +5,8 @@ import {
   fetchOrganizationMembers,
   createOrganization,
   fetchOrganizationNamespaces,
+  fetchOrganizationShortURLs,
+  createShortURL,
 } from './organizationThunks';
 
 // Initial state
@@ -24,15 +26,20 @@ const initialState = {
   // Namespaces of current organization
   namespaces: [],
   
+  // Short URLs of current organization
+  shortURLs: [],
+  
   // Loading states
   isLoading: false,
   isMembersLoading: false,
   isNamespacesLoading: false,
+  isShortURLsLoading: false,
   
   // Error states
   error: null,
   membersError: null,
   namespacesError: null,
+  shortURLsError: null,
 };
 
 // Organization slice
@@ -165,6 +172,34 @@ const organizationSlice = createSlice({
       .addCase(fetchOrganizationNamespaces.rejected, (state, action) => {
         state.isNamespacesLoading = false;
         state.namespacesError = action.payload;
+      })
+      
+      // Fetch organization short URLs
+      .addCase(fetchOrganizationShortURLs.pending, (state) => {
+        state.isShortURLsLoading = true;
+        state.shortURLsError = null;
+      })
+      .addCase(fetchOrganizationShortURLs.fulfilled, (state, action) => {
+        state.isShortURLsLoading = false;
+        state.shortURLs = action.payload;
+      })
+      .addCase(fetchOrganizationShortURLs.rejected, (state, action) => {
+        state.isShortURLsLoading = false;
+        state.shortURLsError = action.payload;
+      })
+      
+      // Create short URL
+      .addCase(createShortURL.pending, (state) => {
+        state.isShortURLsLoading = true;
+        state.shortURLsError = null;
+      })
+      .addCase(createShortURL.fulfilled, (state, action) => {
+        state.isShortURLsLoading = false;
+        state.shortURLs.unshift(action.payload); // Add to beginning of list
+      })
+      .addCase(createShortURL.rejected, (state, action) => {
+        state.isShortURLsLoading = false;
+        state.shortURLsError = action.payload;
       });
   },
 });

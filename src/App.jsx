@@ -3,6 +3,7 @@ import { useAuth } from './redux/auth/authHooks';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import AcceptInvitation from './pages/AcceptInvitation';
 import './App.css';
 
 function App() {
@@ -23,6 +24,10 @@ function App() {
           <Route 
             path="/dashboard" 
             element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />} 
+          />
+          <Route 
+            path="/accept-invitation/:token" 
+            element={<AcceptInvitation />} 
           />
           <Route 
             path="/" 

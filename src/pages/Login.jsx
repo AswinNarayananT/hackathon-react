@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../redux/auth/authHooks';
 import CustomInput from '../components/common/Input';
 import Button from '../components/common/Button';
@@ -14,9 +14,19 @@ const Login = () => {
   });
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
+  const [pendingInvitation, setPendingInvitation] = useState(null);
   
   const { loginUser, isLoading, error, clearAuthError } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    // Check for pending invitation token
+    const token = localStorage.getItem('pending_invitation_token');
+    if (token) {
+      setPendingInvitation(token);
+    }
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -67,7 +77,15 @@ const Login = () => {
     
     try {
       await loginUser(formData).unwrap();
-      navigate('/dashboard');
+      
+      // Check if there's a pending invitation
+      const invitationToken = localStorage.getItem('pending_invitation_token');
+      if (invitationToken) {
+        // Redirect to invitation page to auto-accept
+        navigate(`/accept-invitation/${invitationToken}`);
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error) {
       console.error('Login failed:', error);
     }
@@ -113,6 +131,12 @@ const Login = () => {
         <Card elevation={8} sx={{ borderRadius: 3, overflow: 'hidden' }}>
           <Box sx={{ p: 4 }}>
             <form onSubmit={handleSubmit}>
+              {pendingInvitation && (
+                <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
+                  You have a pending organization invitation. Sign in to accept it!
+                </Alert>
+              )}
+              
               {error && (
                 <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
                   {error}

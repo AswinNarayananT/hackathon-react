@@ -43,6 +43,20 @@ export const login = createAsyncThunk(
         localStorage.setItem('token', data.access);
       }
       
+      // Check for pending invitation token
+      const pendingToken = localStorage.getItem('pending_invitation_token');
+      if (pendingToken) {
+        try {
+          // Auto-accept invitation after login
+          await api.post(`/shorturl/invitations/${pendingToken}/accept/`);
+          localStorage.removeItem('pending_invitation_token');
+          data.invitation_accepted = true;
+        } catch (invError) {
+          console.error('Failed to auto-accept invitation:', invError);
+          data.invitation_error = invError.response?.data?.error;
+        }
+      }
+      
       return data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message || 'Login failed');
