@@ -1,5 +1,6 @@
 import { createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../api';
+import { clearOrganizationData } from '../organization/organizationSlice';
 
 // Register thunk
 export const register = createAsyncThunk(
@@ -54,17 +55,22 @@ export const login = createAsyncThunk(
 // Logout thunk
 export const logout = createAsyncThunk(
   'auth/logout',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue, dispatch }) => {
     try {
       // Call backend to clear refresh token cookie
       await api.post('/users/custom-logout/');
       
       // Remove access token from localStorage
       localStorage.removeItem('token');
+      
+      // Clear organization data
+      dispatch(clearOrganizationData());
+      
       return null;
     } catch (error) {
-      // Even if backend call fails, clear local token
+      // Even if backend call fails, clear local token and organization data
       localStorage.removeItem('token');
+      dispatch(clearOrganizationData());
       return rejectWithValue(error.message || 'Logout failed');
     }
   }
